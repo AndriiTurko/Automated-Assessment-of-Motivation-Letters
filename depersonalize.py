@@ -6,15 +6,13 @@ from tqdm import tqdm
 
 def remove_technical_paragraph(letter):
     return re.sub(r"(Мотиваційний лист)\s+[^\r\n]+(?:\r?\n\s*[^\r\n]+){2,}?(?=\r?\n\s*[^\r\n]*[.,!](\r?\n|$))", "", letter).lstrip()
-    # return re.sub(r"([Рр])ектор(у|ові)\s+[^\r\n]+(?:\r?\n\s*[^\r\n]+){2,}?(?=\r?\n\s*[^\r\n]*[.,!](\r?\n|$))", "", letter).lstrip()
-    # return re.sub(r"([Рр])ектор(у|ові)\s+[^\r\n]+(?:\r?\n\s*[^\r\n]+){2,}?(?=\r?\n\s*[^\r\n]*[.,!]\s*(\r?\n|$))", "", letter).lstrip()
 
 def remove_blank_lines(letter):
     return re.sub(r'(?<=\n)\s*\n+', '', letter)
 
 
 def clean_short_lines(text):
-    return re.sub(r"^(?!.*[Шш]ановн(ий|і|а))(.{1,70}?)[,.](?=\r?$)", r"\1", text, flags=re.MULTILINE)
+    return re.sub(r"^(?!.*[Шш]ановн(ий|і|а))(.{10,60}?)[,.](?=\r?$)", r"\1", text, flags=re.MULTILINE)
 
 
 def generate_name_forms(name):
@@ -22,7 +20,7 @@ def generate_name_forms(name):
     name = name.lower().replace('й', 'й').replace('ї', 'ї').capitalize()
 
     drop_last_if = ('а', 'я', 'о', 'і', 'й', 'е', 'ь')
-    suffixes = 'а|у|е|о|і|я|ю|є|и|ї|ий|ого|ому|ої|ій'
+    suffixes = 'а|я|о|і|й|е|ь|у|ю|є|и|ї|ий|ого|ому|ої|ій'
 
     if name[-2:] == 'ий':
         base = name[:-2]
@@ -56,8 +54,6 @@ def build_name_combinations(surname, first_name, patronymic, extra=None):
 
 
 def depersonalize_text(filename, input_text):
-    # Extract name details from filename
-    # match = re.search(r'МЛ_(\w+)_(\w+)_(\w+)_\d+', filename)
     pattern = r'МЛ_([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)_([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)*_?([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)_([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)*_?\d+'
     match = re.search(pattern, filename)
 
@@ -92,15 +88,29 @@ def depersonalize_text(filename, input_text):
         fr'{DOBKO} {TARAS}',
     ]
 
-    # Compile patterns
+    MOHYLIAK = r'Могиляк'
+    IVANNA = r'Іванн(а|о|и|і)'
+    ORESTIVNA = r'Орестівн(а|о|и|і)'
+
+    director_patterns = [
+        fr'{MOHYLIAK} {IVANNA} {ORESTIVNA}',
+        fr'{IVANNA} {MOHYLIAK} {ORESTIVNA}',
+        fr'{IVANNA} {MOHYLIAK}',
+        fr'{IVANNA} {ORESTIVNA} {MOHYLIAK}',
+        fr'{IVANNA} {ORESTIVNA}',
+        fr'{MOHYLIAK} {IVANNA}',
+        fr'{IVANNA}(?! Папа)',  # Standalone case for Іванна, excluding Іванна Папа
+    ]
+
     entrant_regex = re.compile('|'.join(entrant_patterns), flags=re.IGNORECASE | re.UNICODE)
     rector_regex = re.compile('|'.join(rector_patterns), re.UNICODE)
+    director_regex = re.compile('|'.join(director_patterns), re.UNICODE)
 
-    # Replace
     step1 = entrant_regex.sub("[ВСТУПНИК]", input_text)
     step2 = rector_regex.sub("[РЕКТОР]", step1)
+    step3 = director_regex.sub("[ДИРЕКТОР]", step2)
 
-    return step2
+    return step3
 
 
 def process_file(src_file_path, filename, dest_file_path):
@@ -137,6 +147,5 @@ def process_files_and_create_folders(src_dir, dest_dir):
 if __name__ == "__main__":
     src_directory = './motivation_letters'
     dest_directory = './depersonalized_letters'
-    # src_directory = './letters_1'
-    # dest_directory = './dest_1'
+
     process_files_and_create_folders(src_directory, dest_directory)
