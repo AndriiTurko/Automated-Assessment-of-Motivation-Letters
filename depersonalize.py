@@ -1,11 +1,33 @@
+import csv
 import os
 import re
 from itertools import permutations
 from tqdm import tqdm
 
+technical_paragraph_pattern = r"(Мотиваційний лист)\s+[^\r\n]+(?:\r?\n\s*[^\r\n]+){2,}?(?=\r?\n\s*[^\r\n]*[.,!](\r?\n|$))"
+
+
+def extract_average_score(letter):
+    technical_paragraph = re.search(technical_paragraph_pattern, letter)
+
+    if technical_paragraph:
+        technical_paragraph = technical_paragraph.group(0)
+        average_score_groups = re.search(r"(?:(?:[Сс]ередній|[Бб]ал)\D*)(\d+([.,]\d+)?)|^\s*(\d+([.,]\d+)?)\s*$", technical_paragraph, re.IGNORECASE | re.MULTILINE)
+
+        if average_score_groups:
+            average_score = average_score_groups.group(1) or average_score_groups.group(3)
+            try:
+                average_score = float(average_score.replace(',', '.'))
+            except ValueError as e:
+                print(f"average_score : {average_score}, average_score 1: {average_score_groups.group(1)}, average_score 2: {average_score_groups.group(3)}")
+                print(e)
+                return 'error'
+            return average_score
+
+    return '-'
 
 def remove_technical_paragraph(letter):
-    return re.sub(r"(Мотиваційний лист)\s+[^\r\n]+(?:\r?\n\s*[^\r\n]+){2,}?(?=\r?\n\s*[^\r\n]*[.,!](\r?\n|$))", "", letter).lstrip()
+    return re.sub(technical_paragraph_pattern, "", letter).lstrip()
 
 def remove_blank_lines(letter):
     return re.sub(r'(?<=\n)\s*\n+', '', letter)
@@ -113,39 +135,51 @@ def depersonalize_text(filename, input_text):
     return step3
 
 
-def process_file(src_file_path, filename, dest_file_path):
+def mentions_average_score(text):
+    return 1 if re.search(r"[Сс]ередн(і[йм]|ього) [Бб]ал(ом|у)?", text) is not None else 0
+
+
+def process_file(src_file_path, filename):
     with open(src_file_path, "r", encoding="utf-8") as file:
         text = file.read()
 
     text = remove_blank_lines(text)
     text = clean_short_lines(text)
     text = depersonalize_text(filename, text)
+    average_score = extract_average_score(text)
     text = remove_technical_paragraph(text)
+    mentions_average = mentions_average_score(text)
+
+    return average_score, mentions_average, text
 
 
-    with open(dest_file_path, "w", encoding="utf-8") as file:
-        file.write(text)
+def process_files_and_write_to_csv(src_dir, output_csv):
+    with open(output_csv, mode='w', encoding='utf-8', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['letter_id', 'program', 'average_score', 'mentions_average', 'text'])
+
+        counter = 0
+        for root, dirs, files in os.walk(src_dir):
+            program = os.path.basename(root).split(' - ')[0]
+            for file in tqdm(files, desc=f"Processing folder: {program}"):
+                letter_id = os.path.splitext(file)[0].split('_')[-1]
+
+                file_path = os.path.join(root, file)
+
+                average_score, mentions_average, text = process_file(file_path, file)
 
 
-def process_files_and_create_folders(src_dir, dest_dir):
-    for root, dirs, files in os.walk(src_dir):
-        folder = os.path.basename(root)
-        for file in tqdm(files, desc=f'Processing files in {folder}'):
-            relative_folder = os.path.relpath(root, src_dir)
+                if average_score == '-' and mentions_average:
+                        counter += 1
 
-            dest_folder = os.path.join(dest_dir, relative_folder)
-            os.makedirs(dest_folder, exist_ok=True)
+                # print(f"letter_id: {letter_id}, average_score: {average_score}")
 
-            src_file_path = os.path.join(root, file)
-            splitted = file.split('_')
-            output_file = splitted[0] + '_' + splitted[-1]
-            dest_file_path = os.path.join(dest_folder, output_file)
+                writer.writerow([letter_id, program, average_score, mentions_average, text])
 
-            process_file(src_file_path, file, dest_file_path)
+        print(f"Total letters with no average score but with mentions: {counter}")
 
 
 if __name__ == "__main__":
     src_directory = './motivation_letters'
-    dest_directory = './depersonalized_letters'
-
-    process_files_and_create_folders(src_directory, dest_directory)
+    output_csv = './letters_1.csv'
+    process_files_and_write_to_csv(src_directory, output_csv)
