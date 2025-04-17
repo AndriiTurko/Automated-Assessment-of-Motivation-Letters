@@ -8,29 +8,44 @@ technical_paragraph_pattern = r"(Мотиваційний лист)\s+[^\r\n]+(?
 
 
 def extract_average_score(letter):
-    technical_paragraph = re.search(technical_paragraph_pattern, letter)
+    match = re.search(technical_paragraph_pattern, letter)
+    if not match:
+        return '-'
 
-    if technical_paragraph:
-        technical_paragraph = technical_paragraph.group(0)
-        average_score_groups = re.search(r"(?:(?:[Сс]ередній|[Бб]ал)\D*)(\d+([.,]\d+)?)|^\s*(\d+([.,]\d+)?)\s*$", technical_paragraph, re.IGNORECASE | re.MULTILINE)
+    paragraph = match.group(0)
+    score_match = re.search(
+        # r"(?:(?:[Сс]ередній|[Бб]ал)\D*)(\d+([.,]\d+)?)|^\s*(\d+([.,]\d+)?)\s*$",
+        r"(?:(?:[Сс]ередній|[Бб]ал)\D*)(\d+([.,]\d+)?)|^\s*(\d+([.,]\d+)?)\s*$|(\d+([.,]\d+)?)\s+[Бб]ал(ів)?",
+        paragraph,
+        re.IGNORECASE | re.MULTILINE)
 
-        if average_score_groups:
-            average_score = average_score_groups.group(1) or average_score_groups.group(3)
-            try:
-                average_score = float(average_score.replace(',', '.'))
-            except ValueError as e:
-                print(f"average_score : {average_score}, average_score 1: {average_score_groups.group(1)}, average_score 2: {average_score_groups.group(3)}")
-                print(e)
-                return 'error'
-            return average_score
+    if not score_match:
+        return '-'
 
-    return '-'
+    raw_score = score_match.group(1) or score_match.group(3) or score_match.group(5)
+    raw_score = raw_score.replace(',', '.')
+
+    parts = raw_score.split('.')
+    if len(parts) > 2:
+        return '-'
+
+    int_part, *decimal_part = parts
+    if len(int_part) > 2:
+        return '-'
+    if decimal_part and len(decimal_part[0]) > 4:
+        return '-'
+
+    try:
+        return float(raw_score)
+    except ValueError:
+        return '-'
 
 def remove_technical_paragraph(letter):
-    return re.sub(technical_paragraph_pattern, "", letter).lstrip()
+    return re.sub(technical_paragraph_pattern, "", letter, 1).lstrip()
 
 def remove_blank_lines(letter):
-    return re.sub(r'(?<=\n)\s*\n+', '', letter)
+    letter = re.sub(r'^\s+', '', letter, flags=re.MULTILINE)
+    return re.sub(r'\s+$', '', letter, flags=re.MULTILINE)
 
 
 def clean_short_lines(text):
@@ -148,17 +163,19 @@ def process_file(src_file_path, filename):
     text = depersonalize_text(filename, text)
     average_score = extract_average_score(text)
     text = remove_technical_paragraph(text)
+    text = re.sub(r'\uFEFF', '', text)
+    text = text.replace('ґ.', '')
+    text = text.strip('\n')
     mentions_average = mentions_average_score(text)
 
     return average_score, mentions_average, text
 
 
-def process_files_and_write_to_csv(src_dir, output_csv):
+def process_letters_and_write_to_csv(src_dir, output_csv):
     with open(output_csv, mode='w', encoding='utf-8', newline='') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['letter_id', 'program', 'average_score', 'mentions_average', 'text'])
+        writer.writerow(['letter_id', 'program', 'average_score', 'mentions_average', 'length', 'text'])
 
-        counter = 0
         for root, dirs, files in os.walk(src_dir):
             program = os.path.basename(root).split(' - ')[0]
             for file in tqdm(files, desc=f"Processing folder: {program}"):
@@ -168,15 +185,8 @@ def process_files_and_write_to_csv(src_dir, output_csv):
 
                 average_score, mentions_average, text = process_file(file_path, file)
 
+                writer.writerow([letter_id, program, average_score, mentions_average, len(text.split()), text])
 
-                if average_score == '-' and mentions_average:
-                        counter += 1
-
-                # print(f"letter_id: {letter_id}, average_score: {average_score}")
-
-                writer.writerow([letter_id, program, average_score, mentions_average, text])
-
-        print(f"Total letters with no average score but with mentions: {counter}")
 
 
 if __name__ == "__main__":
