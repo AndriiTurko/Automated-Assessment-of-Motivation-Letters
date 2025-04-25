@@ -1,0 +1,19 @@
+average_score - 1
+avg_score_mention - 1
+question_1 - 5
+question_2 - 5
+question_3 - 5
+question_4 - 5
+question_5 - 5
+question_6 - 5
+question_7 - 5
+grammar 0-4 - 5
+grammar 4-8 - 4
+grammar 8-12 - 3
+grammar 12-16 - 2
+grammar 16-20 - 1
+grammar 20+ - 0
+length 800-900 - 3
+length 700-1000 - 1
+
+total - 45
