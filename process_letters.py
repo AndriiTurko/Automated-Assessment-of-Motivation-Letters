@@ -1,8 +1,13 @@
-import csv
 import os
 import re
 from itertools import permutations
+
+import pandas as pd
 from tqdm import tqdm
+
+from features.criteria import get_criteria_normalized
+from features.similarity import compute_similarity
+from features.normalize_text import normalize_text
 
 technical_paragraph_pattern = r"(Мотиваційний лист)\s+[^\r\n]+(?:\r?\n\s*[^\r\n]+){2,}?(?=\r?\n\s*[^\r\n]*[.,!](\r?\n|$))"
 
@@ -14,7 +19,6 @@ def extract_average_score(letter):
 
     paragraph = match.group(0)
     score_match = re.search(
-        # r"(?:(?:[Сс]ередній|[Бб]ал)\D*)(\d+([.,]\d+)?)|^\s*(\d+([.,]\d+)?)\s*$",
         r"(?:(?:[Сс]ередній|[Бб]ал)\D*)(\d+([.,]\d+)?)|^\s*(\d+([.,]\d+)?)\s*$|(\d+([.,]\d+)?)\s+[Бб]ал(ів)?",
         paragraph,
         re.IGNORECASE | re.MULTILINE)
@@ -91,7 +95,7 @@ def build_name_combinations(surname, first_name, patronymic, extra=None):
 
 
 def depersonalize_text(filename, input_text):
-    pattern = r'МЛ_([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)_([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)*_?([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)_([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)*_?\d+'
+    pattern = r'МЛ_([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)_([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)_(([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)*_)?(([ІіЇїЄєЬьЮюйїА-Яа-я-`]+)*_)?\d+'
     match = re.search(pattern, filename)
 
     if not match:
@@ -102,11 +106,11 @@ def depersonalize_text(filename, input_text):
     match_groups = match.groups()
 
     # Create entrant's ПІБ (all combinations)
-    if match_groups[3] is not None:
-        surname, second_surname_or_first_name, first_name_or_patronymic_1, patronymic_1_or_patronymic_2 = match_groups
+    if match_groups[5] is not None:
+        surname, second_surname_or_first_name, _, first_name_or_patronymic_1, _, patronymic_1_or_patronymic_2 = match_groups
         entrant_patterns = build_name_combinations(surname, second_surname_or_first_name, first_name_or_patronymic_1, patronymic_1_or_patronymic_2)
     else:
-        surname, first_name, patronymic, _ = match_groups
+        surname,first_name, _, patronymic, _, _ = match_groups
         entrant_patterns = build_name_combinations(surname, first_name, patronymic)
         if '-' in first_name:
             first_name_parts = first_name.split('-')
@@ -171,25 +175,64 @@ def process_file(src_file_path, filename):
     return average_score, mentions_average, text
 
 
+# def process_letters_and_write_to_csv(src_dir, output_csv):
+#     with open(output_csv, mode='w', encoding='utf-8', newline='') as csvfile:
+#         writer = csv.writer(csvfile)
+#         writer.writerow(['letter_id', 'program', 'average_score', 'mentions_average', 'length', 'text'])
+#
+#         for root, dirs, files in os.walk(src_dir):
+#             program = os.path.basename(root).split(' - ')[0]
+#             for file in tqdm(files, desc=f"Processing folder: {program}"):
+#                 letter_id = os.path.splitext(file)[0].split('_')[-1]
+#
+#                 file_path = os.path.join(root, file)
+#
+#                 average_score, mentions_average, text = process_file(file_path, file)
+#
+#                 writer.writerow([letter_id, program, average_score, mentions_average, len(text.split()), text])
+
+
 def process_letters_and_write_to_csv(src_dir, output_csv):
-    with open(output_csv, mode='w', encoding='utf-8', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['letter_id', 'program', 'average_score', 'mentions_average', 'length', 'text'])
+    data = []
 
-        for root, dirs, files in os.walk(src_dir):
-            program = os.path.basename(root).split(' - ')[0]
-            for file in tqdm(files, desc=f"Processing folder: {program}"):
-                letter_id = os.path.splitext(file)[0].split('_')[-1]
+    for root, dirs, files in os.walk(src_dir):
+        program = os.path.basename(root).split(' - ')[0]
+        for file in tqdm(files, desc=f"Processing folder: {program}"):
+            letter_id = os.path.splitext(file)[0].split('_')[-1]
+            file_path = os.path.join(root, file)
 
-                file_path = os.path.join(root, file)
+            average_score, mentions_average, text = process_file(file_path, file)
+            normalized_text = normalize_text(text)
+            criteria_list = get_criteria_normalized(program)
+            questions_scores = compute_similarity(text, criteria_list)
 
-                average_score, mentions_average, text = process_file(file_path, file)
+            questions_scores_to_data = {
+                f'question_{i+1}': score for i, score in enumerate(questions_scores)
+            }
 
-                writer.writerow([letter_id, program, average_score, mentions_average, len(text.split()), text])
+            # Append row data to the list
+            data.append({
+                'letter_id': letter_id,
+                'program': program,
+                'average_score': average_score,
+                'mentions_average': mentions_average,
+                'length': len(text.split()),
+                'text': text,
+                'normalized_text': normalized_text,
+                **questions_scores_to_data
+            })
+
+    # Create a DataFrame from the collected data
+    df = pd.DataFrame(data)
+
+    # Write the DataFrame to a CSV file
+    df.to_csv(output_csv, index=False, encoding='utf-8')
 
 
 
 if __name__ == "__main__":
     src_directory = './motivation_letters'
-    output_csv = './letters_1.csv'
-    process_files_and_write_to_csv(src_directory, output_csv)
+    output_csv = 'data/letters.csv'
+    # src_directory = './bin/letters_4'
+    # output_csv = './bin/letters_7.csv'
+    process_letters_and_write_to_csv(src_directory, output_csv)
