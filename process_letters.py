@@ -175,22 +175,6 @@ def process_file(src_file_path, filename):
     return average_score, mentions_average, text
 
 
-# def process_letters_and_write_to_csv(src_dir, output_csv):
-#     with open(output_csv, mode='w', encoding='utf-8', newline='') as csvfile:
-#         writer = csv.writer(csvfile)
-#         writer.writerow(['letter_id', 'program', 'average_score', 'mentions_average', 'length', 'text'])
-#
-#         for root, dirs, files in os.walk(src_dir):
-#             program = os.path.basename(root).split(' - ')[0]
-#             for file in tqdm(files, desc=f"Processing folder: {program}"):
-#                 letter_id = os.path.splitext(file)[0].split('_')[-1]
-#
-#                 file_path = os.path.join(root, file)
-#
-#                 average_score, mentions_average, text = process_file(file_path, file)
-#
-#                 writer.writerow([letter_id, program, average_score, mentions_average, len(text.split()), text])
-
 
 def process_letters_and_write_to_csv(src_dir, output_csv):
     data = []
@@ -216,16 +200,14 @@ def process_letters_and_write_to_csv(src_dir, output_csv):
                 'program': program,
                 'average_score': average_score,
                 'mentions_average': mentions_average,
-                'length': len(text.split()),
+                'word_count': len(text.split()),
                 'text': text,
                 'normalized_text': normalized_text,
                 **questions_scores_to_data
             })
 
-    # Create a DataFrame from the collected data
     df = pd.DataFrame(data)
 
-    # Write the DataFrame to a CSV file
     df.to_csv(output_csv, index=False, encoding='utf-8')
 
 
@@ -233,6 +215,4 @@ def process_letters_and_write_to_csv(src_dir, output_csv):
 if __name__ == "__main__":
     src_directory = './motivation_letters'
     output_csv = 'data/letters.csv'
-    # src_directory = './bin/letters_4'
-    # output_csv = './bin/letters_7.csv'
     process_letters_and_write_to_csv(src_directory, output_csv)

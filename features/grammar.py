@@ -1,3 +1,4 @@
+import json
 import multiprocessing
 import time
 
@@ -16,7 +17,7 @@ def check_grammar(text, tool):
     except Exception as e:
         print(f"Error checking grammar: {e}")
         matches = []
-    return len(matches), matches
+    return len(matches), json.dumps([m.__dict__ for m in matches])
 
 
 def process_chunk(chunk):
@@ -48,7 +49,7 @@ def check_grammar_multiprocessing(df):
 
     df = pd.concat(results, ignore_index=True)
 
-    df.to_csv(f"../data/letters_with_grammar.csv", index=False)
+    df.to_csv(f"../data/letters_with_grammar_1.csv", index=False)
 
 
 def main():
