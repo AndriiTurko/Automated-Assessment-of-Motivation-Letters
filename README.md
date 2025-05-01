@@ -130,4 +130,4 @@ After all steps, the final CSV includes:
 
 ## 📄 License
 
-This project was developed for academic use and evaluation. License to be defined.
+This project is licensed under the MIT License – see the [LICENSE](./LICENSE) file for details.
